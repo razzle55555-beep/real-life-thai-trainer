@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Real Life Thai Trainer (Google TTS)</title>
+  <style>
+    body { font-family: system-ui, Arial; margin: 24px; max-width: 780px; }
+    button { padding: 10px 14px; font-size: 16px; margin-right: 10px; }
+    .mono { font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input { padding: 8px; font-size: 16px; width: 120px; }
+  </style>
+</head>
+<body>
+  <h2>Real Life Thai Trainer</h2>
+
+  <div class="row">
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+
+    <label>EN hold ms</label><input id="holdEn" value="1500">
+    <label>Pause before TH ms</label><input id="pauseBeforeTh" value="600">
+    <label>Pause normal→slow ms</label><input id="pauseNS" value="700">
+    <label>Gap after phrase ms</label><input id="gapAfter" value="1400">
+  </div>
+
+  <p class="mono" id="status">idle</p>
+  <p class="mono" id="error" style="color:#b00020"></p>
+
+<script>
+(() => {
+
+
+  const phrases = [
+  ["Hello", "สวัสดีครับ", "sà-wàt-dee kráp"],
+  ["How are you today?", "วันนี้เป็นยังไงบ้างครับ", "wan-níi bpen yang-ngai bâang kráp"],
+  ["Are you tired?", "เหนื่อยไหมครับ", "nʉ̀ai mái kráp"],
+  ["What are you doing?", "กำลังทำอะไรอยู่ครับ", "gam-lang tam a-rai yùu kráp"],
+  ["I don't understand.", "ผมไม่เข้าใจครับ", "phǒm mâi kâo-jai kráp"],
+];
+
+
+  let running = false;
+  let idx = 0;
+  const statusEl = document.getElementById("status");
+  const errEl = document.getElementById("error");
+  const startBtn = document.getElementById("start");
+  const stopBtn = document.getElementById("stop");
+
+  const holdEnEl = document.getElementById("holdEn");
+  const pauseBeforeThEl = document.getElementById("pauseBeforeTh");
+  const pauseNSEl = document.getElementById("pauseNS");
+  const gapAfterEl = document.getElementById("gapAfter");
+
+  let audio = null;
+
+  function setStatus(t){ statusEl.textContent = t; }
+  function setError(t){ errEl.textContent = t || ""; }
+
+  function toInt(el, fallback) {
+    const n = parseInt((el.value || "").trim(), 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function ttsUrl(text, lang) {
+    const q = encodeURIComponent(text);
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${q}&tl=${lang}&client=tw-ob`;
+  }
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+  async function playTTS(text, lang, rate) {
+    return new Promise((resolve, reject) => {
+      const url = ttsUrl(text, lang);
+      audio = new Audio(url);
+      audio.playbackRate = rate;
+
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error("Audio failed to load/play. (Sometimes Google blocks rapid requests. Try again.)"));
+
+      audio.play().catch(err => reject(err));
+    });
+  }
+
+  async function loop() {
+    running = true;
+    setError("");
+
+    while (running) {
+      const [en, th, pron] = phrases[idx];
+
+      const HOLD_EN_MS = toInt(holdEnEl, 1500);
+      const PAUSE_BEFORE_THAI_MS = toInt(pauseBeforeThEl, 600);
+      const PAUSE_BETWEEN_NORMAL_AND_SLOW_MS = toInt(pauseNSEl, 700);
+      const GAP_AFTER_PHRASE_MS = toInt(gapAfterEl, 1400);
+
+      const EN_RATE = 1.0;       // English speed
+      const TH_NORMAL_RATE = 1.0;
+      const TH_SLOW_RATE = 0.75; // try 0.7 if you want slower
+setStatus(`EN: ${en}\nTH: ${th}\nPRON: ${pron || ""}`);
+
+try {
+  await playTTS(en, "en", EN_RATE);
+} catch (e) {
+  setError(String(e));
+  break;
+}
+
+if (!running) break;
+await sleep(HOLD_EN_MS);
+if (!running) break;
+
+
+      setStatus(`(pause)`);
+      await sleep(PAUSE_BEFORE_THAI_MS);
+      if (!running) break;
+
+      setStatus(`TH normal: ${th}\nPRON: ${pron || ""}`);
+
+      try { await playTTS(th, "th", TH_NORMAL_RATE); }
+      catch (e) { setError(String(e)); break; }
+      if (!running) break;
+
+      await sleep(PAUSE_BETWEEN_NORMAL_AND_SLOW_MS);
+      if (!running) break;
+
+      setStatus(`TH slow: ${th}\nPRON: ${pron || ""}`);
+
+      try { await playTTS(th, "th", TH_SLOW_RATE); }
+      catch (e) { setError(String(e)); break; }
+      if (!running) break;
+
+      setStatus(`(gap)`);
+      await sleep(GAP_AFTER_PHRASE_MS);
+      if (!running) break;
+
+      idx = (idx + 1) % phrases.length;
+    }
+
+    running = false;
+    setStatus("stopped");
+  }
+
+  startBtn.addEventListener("click", () => {
+    if (!running) loop();
+  });
+
+  stopBtn.addEventListener("click", () => {
+    running = false;
+    try { if (audio) audio.pause(); } catch {}
+  });
+
+})();
+
+
+</script>
+</body>
+</html>
