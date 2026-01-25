@@ -3,48 +3,57 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Real Life Thai Trainer (Google TTS)</title>
+  <title>Real Life Thai Trainer (Car Mode)</title>
   <style>
-    body { font-family: system-ui, Arial; margin: 24px; max-width: 780px; }
-    button { padding: 10px 14px; font-size: 16px; margin-right: 10px; }
-    .mono { font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    input { padding: 8px; font-size: 16px; width: 120px; }
+    body { font-family: system-ui, Arial; margin: 20px; max-width: 780px; }
+    button { padding: 12px 16px; font-size: 18px; margin-right: 10px; }
+    .mono { font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; font-size: 16px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin: 10px 0; }
+    input { padding: 10px; font-size: 16px; width: 120px; }
+    .hint { opacity: 0.75; font-size: 14px; margin-top: 6px; }
   </style>
 </head>
 <body>
-  <h2>Real Life Thai Trainer</h2>
+  <h2>Real Life Thai Trainer — Car Mode (iPhone)</h2>
 
   <div class="row">
     <button id="start">Start</button>
     <button id="stop">Stop</button>
 
-    <label>EN hold ms</label><input id="holdEn" value="1500">
+    <label>EN hold ms</label><input id="holdEn" value="1200">
     <label>Pause before TH ms</label><input id="pauseBeforeTh" value="600">
-    <label>Pause normal→slow ms</label><input id="pauseNS" value="700">
-    <label>Gap after phrase ms</label><input id="gapAfter" value="1400">
+    <label>Pause normal→slow ms</label><input id="pauseNS" value="650">
+    <label>Gap after phrase ms</label><input id="gapAfter" value="1200">
+  </div>
+
+  <div class="hint">
+    iPhone tip: Tap <b>Start</b> once to allow audio. If Thai voice is silent, enable/download a Thai voice in iOS:
+    Settings → Accessibility → Spoken Content → Voices → Thai.
   </div>
 
   <p class="mono" id="status">idle</p>
-  <p class="mono" id="error" style="color:#b00020"></p>
 
 <script>
 (() => {
-
-
+  // ===== YOUR PHRASES (EN, TH, PRON display-only) =====
   const phrases = [
-  ["Hello", "สวัสดีครับ", "sà-wàt-dee kráp"],
-  ["How are you today?", "วันนี้เป็นยังไงบ้างครับ", "wan-níi bpen yang-ngai bâang kráp"],
-  ["Are you tired?", "เหนื่อยไหมครับ", "nʉ̀ai mái kráp"],
-  ["What are you doing?", "กำลังทำอะไรอยู่ครับ", "gam-lang tam a-rai yùu kráp"],
-  ["I don't understand.", "ผมไม่เข้าใจครับ", "phǒm mâi kâo-jai kráp"],
-];
+    ["Good morning", "สวัสดีตอนเช้าครับ", "sà-wàt-dee dton châo kráp"],
+    ["Did you sleep well?", "นอนหลับดีไหมครับ", "non làp dee mái kráp"],
+    ["What are your plans today?", "วันนี้มีแผนอะไรครับ", "wan-níi mee phɛ̌ɛn a-rai kráp"],
+    ["We only have 58 days left", "เราเหลือเวลาแค่ห้าสิบแปดวันแล้วนะครับ", "rao lʉ̌a wee-laa khâe hâa-sìp bpàet wan lɛ́ɛo ná kráp"],
+    ["Is it busy today?", "วันนี้ยุ่งไหมครับ", "wan-níi yûng mái kráp"],
+    ["How is your mom doing?", "คุณแม่เป็นยังไงบ้างครับ", "khun mâe bpen yang-ngai bâang kráp"],
+    ["I miss you very much", "ผมคิดถึงคุณมากครับ", "phǒm khít-thʉ̌ng khun mâak kráp"],
+    ["I'm not sure where I will stay when I come", "ผมยังไม่แน่ใจว่าจะพักที่ไหนตอนที่ผมไปครับ", "phǒm yang mâi nâe-jai wâa jà phák thîi nǎi dton thîi phǒm bpai kráp"],
+    ["Did you eat?", "กินข้าวหรือยังครับ", "gin kâao rʉ̌ʉ yang kráp"],
+    ["I don't understand", "ผมไม่เข้าใจครับ", "phǒm mâi kâo-jai kráp"],
+  ];
 
-
+  // ===== STATE =====
   let running = false;
   let idx = 0;
+
   const statusEl = document.getElementById("status");
-  const errEl = document.getElementById("error");
   const startBtn = document.getElementById("start");
   const stopBtn = document.getElementById("stop");
 
@@ -53,99 +62,78 @@
   const pauseNSEl = document.getElementById("pauseNS");
   const gapAfterEl = document.getElementById("gapAfter");
 
-  let audio = null;
-
   function setStatus(t){ statusEl.textContent = t; }
-  function setError(t){ errEl.textContent = t || ""; }
 
   function toInt(el, fallback) {
     const n = parseInt((el.value || "").trim(), 10);
     return Number.isFinite(n) ? n : fallback;
   }
 
-  function ttsUrl(text, lang) {
-    const q = encodeURIComponent(text);
-    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${q}&tl=${lang}&client=tw-ob`;
-  }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+  // ===== NATIVE SPEECH (NO GOOGLE / NO NETWORK) =====
+  function speak(text, lang, rate = 1.0) {
+    return new Promise((resolve) => {
+      try {
+        // Cancel queue to keep it responsive when looping
+        window.speechSynthesis.cancel();
 
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang;
+        u.rate = rate;
+        u.onend = () => resolve();
+        u.onerror = () => resolve(); // don't crash loop on voice issues
 
-function speakEN(text, rate = 1.0) {
-  return new Promise((resolve) => {
-    try {
-      window.speechSynthesis.cancel(); // stop any queued speech
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "en-US";
-      u.rate = rate;
-      u.onend = () => resolve();
-      window.speechSynthesis.speak(u);
-    } catch {
-      resolve();
-    }
-  });
-}
-
-  async function playTTS(text, lang, rate) {
-    return new Promise((resolve, reject) => {
-      const url = ttsUrl(text, lang);
-      audio = new Audio(url);
-      audio.playbackRate = rate;
-
-      audio.onended = () => resolve();
-      audio.onerror = () => reject(new Error("Audio failed to load/play. (Sometimes Google blocks rapid requests. Try again.)"));
-
-      audio.play().catch(err => reject(err));
+        window.speechSynthesis.speak(u);
+      } catch {
+        resolve();
+      }
     });
   }
 
   async function loop() {
     running = true;
-    setError("");
 
     while (running) {
       const [en, th, pron] = phrases[idx];
 
-      const HOLD_EN_MS = toInt(holdEnEl, 1500);
+      const HOLD_EN_MS = toInt(holdEnEl, 1200);
       const PAUSE_BEFORE_THAI_MS = toInt(pauseBeforeThEl, 600);
-      const PAUSE_BETWEEN_NORMAL_AND_SLOW_MS = toInt(pauseNSEl, 700);
-      const GAP_AFTER_PHRASE_MS = toInt(gapAfterEl, 1400);
+      const PAUSE_BETWEEN_NORMAL_AND_SLOW_MS = toInt(pauseNSEl, 650);
+      const GAP_AFTER_PHRASE_MS = toInt(gapAfterEl, 1200);
 
-      const EN_RATE = 1.0;       // English speed
+      const EN_RATE = 1.0;
       const TH_NORMAL_RATE = 1.0;
-      const TH_SLOW_RATE = 0.75; // try 0.7 if you want slower
-setStatus(`EN: ${en}\nTH: ${th}\nPRON: ${pron || ""}`);
+      const TH_SLOW_RATE = 0.75;
 
-await speakEN(en, EN_RATE);
+      // EN
+      setStatus(`EN: ${en}\nTH: ${th}\nPRON: ${pron || ""}`);
+      await speak(en, "en-US", EN_RATE);
+      if (!running) break;
 
+      await sleep(HOLD_EN_MS);
+      if (!running) break;
 
-if (!running) break;
-await sleep(HOLD_EN_MS);
-if (!running) break;
-
-
-      setStatus(`(pause)`);
+      // Pause before Thai
+      setStatus(`(pause)\nTH: ${th}\nPRON: ${pron || ""}`);
       await sleep(PAUSE_BEFORE_THAI_MS);
       if (!running) break;
 
+      // TH normal
       setStatus(`TH normal: ${th}\nPRON: ${pron || ""}`);
-
-      try { await playTTS(th, "th", TH_NORMAL_RATE); }
-      catch (e) { setError(String(e)); break; }
+      await speak(th, "th-TH", TH_NORMAL_RATE);
       if (!running) break;
 
       await sleep(PAUSE_BETWEEN_NORMAL_AND_SLOW_MS);
       if (!running) break;
 
+      // TH slow
       setStatus(`TH slow: ${th}\nPRON: ${pron || ""}`);
-
-      try { await playTTS(th, "th", TH_SLOW_RATE); }
-      catch (e) { setError(String(e)); break; }
+      await speak(th, "th-TH", TH_SLOW_RATE);
       if (!running) break;
 
-      setStatus(`(gap)`);
+      // Gap
+      setStatus(`(gap)\nNext up: ${phrases[(idx + 1) % phrases.length][0]}`);
       await sleep(GAP_AFTER_PHRASE_MS);
       if (!running) break;
 
@@ -161,15 +149,15 @@ if (!running) break;
   });
 
   stopBtn.addEventListener("click", () => {
-  running = false;
-  try { if (audio) audio.pause(); } catch {}
-  try { window.speechSynthesis.cancel(); } catch {}
-});
+    running = false;
+    try { window.speechSynthesis.cancel(); } catch {}
+  });
 
-
+  // Safety: if tab closes, stop speaking
+  window.addEventListener("beforeunload", () => {
+    try { window.speechSynthesis.cancel(); } catch {}
+  });
 })();
-
-
 </script>
 </body>
 </html>
