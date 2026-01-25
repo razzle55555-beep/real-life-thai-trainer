@@ -22,7 +22,7 @@
 
     <label>EN hold ms</label><input id="holdEn" value="1200">
     <label>Pause before TH ms</label><input id="pauseBeforeTh" value="600">
-    <label>Pause normal→slow ms</label><input id="pauseNS" value="650">
+    <label>Pause normal→slow ms</label><input id="pauseNS" value="1000">
     <label>Gap after phrase ms</label><input id="gapAfter" value="1200">
   </div>
 
@@ -99,12 +99,12 @@
 
       const HOLD_EN_MS = toInt(holdEnEl, 1200);
       const PAUSE_BEFORE_THAI_MS = toInt(pauseBeforeThEl, 600);
-      const PAUSE_BETWEEN_NORMAL_AND_SLOW_MS = toInt(pauseNSEl, 650);
+      const PAUSE_BETWEEN_NORMAL_AND_SLOW_MS = toInt(pauseNSEl, 1000);
       const GAP_AFTER_PHRASE_MS = toInt(gapAfterEl, 1200);
 
       const EN_RATE = 1.0;
       const TH_NORMAL_RATE = 1.0;
-      const TH_SLOW_RATE = 0.75;
+      const TH_SLOW_RATE = 0.65;
 
       // EN
       setStatus(`EN: ${en}\nTH: ${th}\nPRON: ${pron || ""}`);
